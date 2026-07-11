@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+datasource db {
+  provider = "postgresql"
+}
+
+
+enum UserRole {
+  user
+  admin
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  done
+}
+
+model User {
+  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                   String    @unique
+  passwordHash            String    @map("password_hash")
+  name                    String
+  role                    UserRole  @default(user)
+  isVerified              Boolean   @default(false) @map("is_verified")
+  verificationToken       String?   @map("verification_token")
+  verificationTokenExpiresAt DateTime? @map("verification_token_expires_at")
+  resetToken              String?   @map("reset_token")
+  resetTokenExpiresAt     DateTime? @map("reset_token_expires_at")
+  refreshTokenHash        String?   @map("refresh_token_hash")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+  Task                     Task[]
+
+  @@map("users") 
+
+}
+
+
+model Task {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String
+  description String
+  status      TaskStatus @default(todo)
+  userId      String     @map("user_id") @db.Uuid
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  @@map("tasks") 
+}
