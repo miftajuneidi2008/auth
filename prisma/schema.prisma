@@ -42,7 +42,7 @@ model User {
 model Task {
   id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   title       String
-  description String
+  description String?
   status      TaskStatus @default(todo)
   userId      String     @map("user_id") @db.Uuid
   user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)

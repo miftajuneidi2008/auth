@@ -5,6 +5,14 @@ import { Prisma } from '../generated/prisma/client.js';
 @Injectable()
 export class UsersService {
   constructor(private readonly databaseService: DatabaseService) {}
+
+  async findByVerificationToken(token: string) {
+    return this.databaseService.user.findFirst({
+      where: {
+        verificationToken: token,
+      },
+    });
+  }
   async findByEmail(email: string) {
     return this.databaseService.user.findUnique({
       where: { email },

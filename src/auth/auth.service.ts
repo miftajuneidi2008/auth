@@ -2,10 +2,11 @@ import {
   Injectable,
   ConflictException,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { EmailService } from './email.service.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -48,14 +49,47 @@ export class AuthService {
         'Registration successful. Please Check your email to verify your account',
     };
   }
+
+  async verifyEmail(token: string, res: Response) {
+    const user = await this.userService.findByVerificationToken(token);
+    if (!user || !user.verificationToken) {
+      throw new BadRequestException('Invalid Verification Token');
+    }
+    if (
+      user.verificationTokenExpiresAt &&
+      user.verificationTokenExpiresAt < new Date()
+    ) {
+      throw new BadRequestException(
+        'Verification token has expired. please request the new one',
+      );
+    }
+    await this.userService.update(user.id, {
+      isVerified: true,
+      verificationToken: null,
+      verificationTokenExpiresAt: null,
+    });
+    const tokens = await this.generateTokens(user);
+    await this.saveRefreshToken(user.id, tokens.refreshToken);
+    this.setRefreshTokenCookie(res, tokens.refreshToken);
+    return {
+      message: 'Email Verified Successfully',
+      accessToken: tokens.accessToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    };
+  }
   async login(data: LoginDto, res: Response) {
     const user = await this.userService.findByEmail(data.email);
     if (!user) {
       throw new UnauthorizedException('Invalid Credential');
     }
     const passwordMatch = await bcrypt.compare(
-      user.passwordHash,
       data.password,
+      user.passwordHash,
     );
     if (!passwordMatch) {
       throw new UnauthorizedException('Invalid credential');
@@ -77,7 +111,43 @@ export class AuthService {
       },
     };
   }
+  async refresh(refreshToken: string, res: Response) {
+    let payload: { sub: string; email: string };
+    try {
+      payload = await this.jwtService.verifyAsync(refreshToken, {
+        secret: this.configService.get('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
 
+    const user = await this.userService.findById(payload.sub);
+
+    if (!user || !user.refreshTokenHash) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+    const tokenMatch = await bcrypt.compare(
+      refreshToken,
+      user.refreshTokenHash,
+    );
+
+    if (!tokenMatch) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    const tokens = await this.generateTokens(user);
+    await this.saveRefreshToken(user.id, tokens.refreshToken);
+    this.setRefreshTokenCookie(res, tokens.refreshToken);
+
+    return {
+      accessToken: tokens.accessToken,
+    };
+  }
+  async logout(userId: string, res: Response) {
+    await this.userService.update(userId, { refreshTokenHash: null });
+    res.clearCookie('refresh_token');
+    return { message: 'Logged out Successfully' };
+  }
   private async generateTokens(user: User) {
     const payload = { sub: user.id, email: user.email, role: user.role };
 
