@@ -54,7 +54,6 @@ export class AuthController {
     return this.authService.login(dto, res);
   }
 
-  // POST /api/auth/refresh
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
